@@ -1,0 +1,41 @@
+name: Nginx VTS Docker
+on:
+  push:
+    tags:
+      - /.*/
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.ECR_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.ECR_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Cache Docker Layers
+        uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
+      - name: Build, tag, push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ github.repository }}
+          IMAGE_TAG: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.BLOCKFI_GITHUB_ACCESS_TOKEN }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG --force-rm .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          SOURCE_TAG = ${GITHUB_REF#refs/tags/}
+          if [ "$SOURCE_TAG" != "" ]; then
+            docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$SOURCE_TAG
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SOURCE_TAG
+          fi
